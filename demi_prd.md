@@ -70,8 +70,8 @@ Note: For the colour code of this project, we will focus on white, blacks, blue 
 ### 2.1 Header Navigation
 
 **Logo Section:**
-- Text: "Demi" (using Hyperbridge font family)
-- No logo image, only stylized text
+- Text: "demi" (using font Bodoni FLF)
+- logo image by the side
 - Position: Top-left corner
 
 **Navigation Tabs:**
@@ -87,7 +87,7 @@ Note: For the colour code of this project, we will focus on white, blacks, blue 
 ### 2.2 Token Launch Page (Main Interface)
 
 #### Section 1: Page Title
-- Display: "$Demi" (replacing "Bridge" from reference)
+- Display: "$demi" (replacing "Bridge" from reference)
 - Styling: Large, centered heading
 - Font: Bold, prominent display
 
@@ -98,8 +98,8 @@ Note: For the colour code of this project, we will focus on white, blacks, blue 
 - "Send" (right side, replacing "Destination")
 
 **Receive Side (Left):**
-- Token: DEMI (fixed, no dropdown)
-- Display: DEMI logo + "DEMI" text
+- Token: Demi (fixed, no dropdown)
+- Display: Demi logo + "DEMI" text
 - Input field: Amount to receive
 - Calculation: Auto-calculated based on send amount and current price
 
