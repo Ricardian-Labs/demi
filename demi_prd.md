@@ -274,7 +274,7 @@ The following text should appear with typing animation:
 ```
 Welcome to DEMI DEX+
 
-The Future of Decentralized Trading. Our revolutionary decentralized exchange empowers $DEMI holders 
+The Future of Decentralized Trading. Our revolutionary decentralized exchange built by ex-Ethereum and ex-Polkadot devs empowers $DEMI holders 
 with unprecedented earning potential. Every $DEMI holder automatically earns over 13% APY through our 
 innovative staking and liquidity provision mechanisms. Your $DEMI tokens work for you 24/7, generating returns from 
 trading fees, liquidity rewards, and our unique profit-sharing model. We are allocating 50%  of our ICO raise Community & Liquidity Pool and 50% to Team & Development Fund. Demi is built on Polygon which aids lightning-fast transactions with minimal fees, ensuring maximum returns for our holders. $DEMI isn't just another token – it's your gateway to sustainable passive income in the DeFi ecosystem.$DEMI will become the world's biggest ICO launch, setting new standards for community-driven finance. Demi Token goes public on Decemeber 2nd.
@@ -564,93 +564,6 @@ DEMI_WALLET_ADDRESS=0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7
 
 ---
 
-## 11. Performance Requirements
-
-### 11.1 Frontend Performance
-- Page Load Time: < 2 seconds
-- Time to Interactive: < 3 seconds
-- Lighthouse Score: > 90
-- Bundle Size: < 500KB (gzipped)
-
-### 11.2 Backend Performance
-- API Response Time: < 200ms (average)
-- WebSocket Latency: < 100ms
-- Database Query Time: < 50ms
-- Concurrent Users: Support 10,000+
-
-### 11.3 Blockchain Performance
-- Transaction Confirmation: ~2 seconds (Polygon)
-- Gas Optimization: Minimize transaction costs
-- Batch Processing: Support bulk token distributions
-
----
-
-## 12. Monitoring & Analytics
-
-### 12.1 Application Monitoring
-- Error tracking (Sentry)
-- Performance monitoring (New Relic/Datadog)
-- Uptime monitoring (UptimeRobot)
-- Log aggregation (ELK Stack)
-
-### 12.2 Business Analytics
-- User acquisition metrics
-- Conversion rates
-- Token sale progress
-- Wallet connection types
-- Geographic distribution
-
-### 12.3 Blockchain Monitoring
-- Transaction success rates
-- Gas price tracking
-- Smart contract events
-- Wallet balance monitoring
-
----
-
-## 13. Mobile Responsiveness
-
-### 13.1 Breakpoints
-- Mobile: 320px - 768px
-- Tablet: 768px - 1024px
-- Desktop: 1024px+
-
-### 13.2 Mobile-Specific Considerations
-- Touch-friendly button sizes (min 44x44px)
-- Simplified navigation menu
-- Optimized modal displays
-- Responsive typography
-- Gesture support for interactions
-
----
-
-## 14. Accessibility Requirements
-
-- WCAG 2.1 AA compliance
-- Keyboard navigation support
-- Screen reader compatibility
-- High contrast mode option
-- Clear focus indicators
-- Alternative text for images/icons
-
----
-
-## 15. Internationalization (Future)
-
-### 15.1 Supported Languages (Phase 2)
-- English (Default)
-- Spanish
-- Chinese (Simplified)
-- Japanese
-- Korean
-
-### 15.2 Implementation
-- i18n framework integration
-- RTL support preparation
-- Number/currency formatting
-- Date/time localization
-
----
 
 ## Appendix A: Technical Stack Details
 
