@@ -19,6 +19,7 @@ The Demi Token Launch Platform is a decentralized token sale interface enabling 
 - Automated whitepaper distribution
 - Interactive DEX+ information page with live-typing animation
 
+Note: For the colour code of this project, we will focus on white, blacks, blue hues, for the blue, specifically: #0437F2
 ---
 
 ## 1. Platform Architecture Overview
@@ -181,7 +182,7 @@ Your DEMI tokens will be allocated after confirmation.
 
 **Initial State:**
 - Button text: "Connect Wallet"
-- Style: Gradient background (red to green)
+- Style: Gradient background (blue to white)
 - Full width button
 
 **Connected State:**
