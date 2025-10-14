@@ -70,7 +70,7 @@ Note: For the colour code of this project, we will focus on white, blacks, blue 
 ### 2.1 Header Navigation
 
 **Logo Section:**
-- Text: "demi" (using font Bodoni FLF)
+- Text: "demi" (using hyperbridge font family)
 - logo image by the side
 - Position: Top-left corner
 
