@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
@@ -7,14 +6,93 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
- * @title DEMI Token
- * @notice Single contract for DEMI token with built-in sale mechanism
- * @dev Secure sale system with owner withdrawal controls
+ * @title DEMI Token with Vesting
+ * @notice DEMI token with infinite supply, presale mechanism, and co-founder vesting
+ * @dev Owner can mint new tokens (50/50 split), co-founder tokens vest over 24 months
  */
+
+// Vesting Contract for Co-founder
+contract TokenVesting {
+    address public beneficiary;
+    address public owner;
+    IERC20 public token;
+    
+    uint256 public totalAmount;
+    uint256 public startTime;
+    uint256 public duration; // 24 months in seconds
+    uint256 public released;
+    bool public revoked;
+    
+    event TokensReleased(uint256 amount);
+    event VestingRevoked(uint256 amountReturned);
+    
+    constructor(
+        address _beneficiary,
+        address _token,
+        uint256 _totalAmount,
+        uint256 _duration
+    ) {
+        require(_beneficiary != address(0), "Invalid beneficiary");
+        beneficiary = _beneficiary;
+        owner = msg.sender;
+        token = IERC20(_token);
+        totalAmount = _totalAmount;
+        startTime = block.timestamp;
+        duration = _duration;
+    }
+    
+    function releasableAmount() public view returns (uint256) {
+        return vestedAmount() - released;
+    }
+    
+    function vestedAmount() public view returns (uint256) {
+        if (revoked) {
+            return released;
+        }
+        
+        uint256 elapsed = block.timestamp - startTime;
+        
+        if (elapsed >= duration) {
+            return totalAmount;
+        }
+        
+        return (totalAmount * elapsed) / duration;
+    }
+    
+    function release() external {
+        require(!revoked, "Vesting revoked");
+        
+        uint256 amount = releasableAmount();
+        require(amount > 0, "No tokens to release");
+        
+        released += amount;
+        require(token.transfer(beneficiary, amount), "Transfer failed");
+        
+        emit TokensReleased(amount);
+    }
+    
+    function revoke() external {
+        require(msg.sender == owner, "Only owner");
+        require(!revoked, "Already revoked");
+        
+        revoked = true;
+        
+        uint256 unvested = totalAmount - released;
+        if (unvested > 0) {
+            require(token.transfer(owner, unvested), "Transfer failed");
+        }
+        
+        emit VestingRevoked(unvested);
+    }
+    
+    function getRemainingVested() external view returns (uint256) {
+        return totalAmount - released;
+    }
+}
+
 contract DEMI is ERC20, Ownable, ReentrancyGuard {
     
-    // Token configuration
-    uint256 public constant TOTAL_SUPPLY = 3_300_000_000 * 10**18; // 3.3 billion DEMI
+    // No max supply - infinite supply
     
     // Sale configuration
     uint256 public tokenPrice; // Price in USD (6 decimals) - initially $0.01
@@ -29,6 +107,9 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
     uint256 public totalRaisedUSDT;
     uint256 public totalRaisedUSDC;
     
+    // Vesting contract
+    TokenVesting public cofounderVesting;
+    
     // Events
     event TokensPurchased(
         address indexed buyer,
@@ -36,29 +117,74 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
         uint256 paymentAmount,
         address paymentToken
     );
+    event TokensMinted(uint256 amountToOwner, uint256 amountToContract);
     event PriceUpdated(uint256 oldPrice, uint256 newPrice);
     event SaleStatusChanged(bool active);
     event FundsWithdrawn(address token, uint256 amount);
+    event CofounderVestingCreated(address vestingContract, uint256 amount);
     
     /**
-     * @notice Constructor - deploys DEMI token and sets up sale
+     * @notice Constructor - deploys DEMI token and sets up initial distribution
      * @param _usdt Address of USDT token on Polygon
      * @param _usdc Address of USDC token on Polygon
+     * @param _cofounder Address of co-founder for vesting
      */
     constructor(
         address _usdt,
-        address _usdc
+        address _usdc,
+        address _cofounder
     ) ERC20("Demi", "DEMI") Ownable(msg.sender) {
-        // Mint total supply to contract
-        _mint(address(this), TOTAL_SUPPLY);
+        require(_cofounder != address(0), "Invalid cofounder address");
         
         // Set payment tokens
         USDT = IERC20(_usdt);
         USDC = IERC20(_usdc);
         
+        // Initial distribution: 3.3 billion tokens
+        // 1.65B to owner
+        _mint(owner(), 1_650_000_000 * 10**18);
+        
+        // 1.65B for presale/circulation
+        // 165M goes to vesting contract for cofounder
+        // 1.485B stays in contract for presale
+        
+        // Create vesting contract for cofounder (24 months)
+        uint256 cofounderAmount = 165_000_000 * 10**18;
+        uint256 vestingDuration = 730 days; // 24 months
+        
+        cofounderVesting = new TokenVesting(
+            _cofounder,
+            address(this),
+            cofounderAmount,
+            vestingDuration
+        );
+        
+        // Mint tokens for presale + vesting
+        _mint(address(this), 1_485_000_000 * 10**18); // For presale
+        _mint(address(cofounderVesting), cofounderAmount); // For vesting
+        
         // Initialize sale
         tokenPrice = 10000; // $0.01 in 6 decimals
         saleActive = true;
+        
+        emit CofounderVestingCreated(address(cofounderVesting), cofounderAmount);
+    }
+    
+    /**
+     * @notice Mint new tokens (owner only)
+     * @param amount Total amount to mint (will be split 50/50)
+     * @dev 50% goes to owner, 50% goes to contract for presale
+     */
+    function mintTokens(uint256 amount) external onlyOwner {
+        require(amount > 0, "Amount must be greater than 0");
+        require(amount % 2 == 0, "Amount must be even for 50/50 split");
+        
+        uint256 half = amount / 2;
+        
+        _mint(owner(), half);
+        _mint(address(this), half);
+        
+        emit TokensMinted(half, half);
     }
     
     /**
@@ -67,7 +193,6 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
      * @return Number of DEMI tokens (18 decimals)
      */
     function calculateTokenAmount(uint256 usdAmount) public view returns (uint256) {
-        // usdAmount (6 decimals) * 10^18 / tokenPrice (6 decimals) = DEMI tokens (18 decimals)
         return (usdAmount * 10**18) / tokenPrice;
     }
     
@@ -79,20 +204,16 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
         require(saleActive, "Sale not active");
         require(usdtAmount > 0, "Amount must be greater than 0");
         
-        // Calculate DEMI to send
         uint256 demiAmount = calculateTokenAmount(usdtAmount);
         require(demiAmount <= balanceOf(address(this)), "Insufficient DEMI in contract");
         
-        // Transfer USDT from buyer to this contract
         require(
             USDT.transferFrom(msg.sender, address(this), usdtAmount),
             "USDT transfer failed"
         );
         
-        // Transfer DEMI to buyer
         _transfer(address(this), msg.sender, demiAmount);
         
-        // Update tracking
         totalSold += demiAmount;
         totalRaisedUSDT += usdtAmount;
         
@@ -107,20 +228,16 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
         require(saleActive, "Sale not active");
         require(usdcAmount > 0, "Amount must be greater than 0");
         
-        // Calculate DEMI to send
         uint256 demiAmount = calculateTokenAmount(usdcAmount);
         require(demiAmount <= balanceOf(address(this)), "Insufficient DEMI in contract");
         
-        // Transfer USDC from buyer to this contract
         require(
             USDC.transferFrom(msg.sender, address(this), usdcAmount),
             "USDC transfer failed"
         );
         
-        // Transfer DEMI to buyer
         _transfer(address(this), msg.sender, demiAmount);
         
-        // Update tracking
         totalSold += demiAmount;
         totalRaisedUSDC += usdcAmount;
         
@@ -129,10 +246,6 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
     
     // ========== OWNER FUNCTIONS ==========
     
-    /**
-     * @notice Withdraw all USDT from contract
-     * @dev Only owner can call this
-     */
     function withdrawUSDT() external onlyOwner {
         uint256 balance = USDT.balanceOf(address(this));
         require(balance > 0, "No USDT to withdraw");
@@ -141,10 +254,6 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
         emit FundsWithdrawn(address(USDT), balance);
     }
     
-    /**
-     * @notice Withdraw all USDC from contract
-     * @dev Only owner can call this
-     */
     function withdrawUSDC() external onlyOwner {
         uint256 balance = USDC.balanceOf(address(this));
         require(balance > 0, "No USDC to withdraw");
@@ -153,21 +262,12 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
         emit FundsWithdrawn(address(USDC), balance);
     }
     
-    /**
-     * @notice Withdraw unsold DEMI tokens
-     * @dev Only owner can call this - useful after sale ends
-     */
     function withdrawUnsoldTokens() external onlyOwner {
         uint256 balance = balanceOf(address(this));
         require(balance > 0, "No tokens to withdraw");
         _transfer(address(this), owner(), balance);
     }
     
-    /**
-     * @notice Update token price
-     * @param newPrice New price in USD (6 decimals)
-     * @dev Only owner can call this
-     */
     function setTokenPrice(uint256 newPrice) external onlyOwner {
         require(newPrice > 0, "Price must be greater than 0");
         uint256 oldPrice = tokenPrice;
@@ -176,27 +276,21 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
         emit PriceUpdated(oldPrice, newPrice);
     }
     
-    /**
-     * @notice Enable or disable sale
-     * @param _active True to enable, false to disable
-     * @dev Only owner can call this
-     */
     function setSaleActive(bool _active) external onlyOwner {
         saleActive = _active;
         emit SaleStatusChanged(_active);
     }
     
+    /**
+     * @notice Revoke co-founder vesting (if not performing)
+     * @dev Unvested tokens return to owner
+     */
+    function revokeCofounderVesting() external onlyOwner {
+        cofounderVesting.revoke();
+    }
+    
     // ========== VIEW FUNCTIONS ==========
     
-    /**
-     * @notice Get current sale statistics
-     * @return currentPrice Current token price
-     * @return tokensSold Total tokens sold
-     * @return raisedUSDT Total USDT raised
-     * @return raisedUSDC Total USDC raised
-     * @return remainingTokens Tokens remaining in contract
-     * @return isActive Whether sale is active
-     */
     function getSaleStats() external view returns (
         uint256 currentPrice,
         uint256 tokensSold,
@@ -215,11 +309,6 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
         );
     }
     
-    /**
-     * @notice Get contract balance of payment tokens
-     * @return usdtBalance USDT balance in contract
-     * @return usdcBalance USDC balance in contract
-     */
     function getContractBalances() external view returns (
         uint256 usdtBalance,
         uint256 usdcBalance
@@ -227,6 +316,24 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
         return (
             USDT.balanceOf(address(this)),
             USDC.balanceOf(address(this))
+        );
+    }
+    
+    function getCofounderVestingInfo() external view returns (
+        address vestingContract,
+        address beneficiary,
+        uint256 totalAmount,
+        uint256 released,
+        uint256 releasable,
+        bool isRevoked
+    ) {
+        return (
+            address(cofounderVesting),
+            cofounderVesting.beneficiary(),
+            cofounderVesting.totalAmount(),
+            cofounderVesting.released(),
+            cofounderVesting.releasableAmount(),
+            cofounderVesting.revoked()
         );
     }
 }
