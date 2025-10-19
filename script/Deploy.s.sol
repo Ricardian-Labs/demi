@@ -8,15 +8,20 @@ contract DeployScript is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         
+        // Polygon Mainnet addresses
         address USDT = 0xc2132D05D31c914a87C6611C10748AEb04B58e8F;
         address USDC = 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174;
+        address COFOUNDER = 0x6254081923f1125Fa6662285b0229e4bd8Ed2c1D;
+        address RELAY = address(0);  // Deploy relay first, then update
         
         vm.startBroadcast(deployerPrivateKey);
         
-        DEMI demi = new DEMI(USDT, USDC);
-        
-        vm.stopBroadcast();
+        DEMI demi = new DEMI(USDT, USDC, COFOUNDER, RELAY);
         
         console.log("DEMI deployed at:", address(demi));
+        console.log("Owner:", demi.owner());
+        console.log("Cofounder vesting:", address(demi.cofounderVesting()));
+        
+        vm.stopBroadcast();
     }
 }
