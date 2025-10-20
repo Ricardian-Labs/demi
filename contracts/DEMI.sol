@@ -6,28 +6,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-/**
- * @title DEMI Token with Universal Relay Integration
- * @notice All original features + gasless transaction support
- * 
- * ORIGINAL FEATURES (unchanged):
- * - Infinite supply with 50/50 mint split
- * - Presale with USDT/USDC
- * - Co-founder vesting (165M over 24 months)
- * - buyWithUSDT() and buyWithUSDC() functions
- * 
- * NEW FEATURE:
- * - receiveRelayPayment() callback for gasless purchases
- * - Users can buy with ANY token via Universal Relay
- * - No gas fees required for users
- */
-
-interface IUniversalRelay {
-    function supportedTokens(address) external view returns (bool);
-    function calculateFee(address project, uint256 developerFee) external view returns (uint256);
-}
-
-// Vesting Contract (unchanged)
 contract TokenVesting {
     address public beneficiary;
     address public owner;
@@ -89,11 +67,6 @@ contract TokenVesting {
 
 contract DEMI is ERC20, Ownable, ReentrancyGuard {
     
-    /*//////////////////////////////////////////////////////////////
-                        STATE VARIABLES
-    //////////////////////////////////////////////////////////////*/
-    
-    // Original variables
     uint256 public tokenPrice;
     bool public saleActive;
     IERC20 public immutable USDT;
@@ -103,58 +76,36 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
     uint256 public totalRaisedUSDC;
     TokenVesting public cofounderVesting;
     
-    // NEW: Relay integration
-    address public relay;
-    mapping(address => uint256) public totalRaisedByToken;  // Track all tokens
-    
-    /*//////////////////////////////////////////////////////////////
-                            EVENTS
-    //////////////////////////////////////////////////////////////*/
-    
     event TokensPurchased(address indexed buyer, uint256 demiAmount, uint256 paymentAmount, address paymentToken);
     event TokensMinted(uint256 amountToOwner, uint256 amountToContract);
     event PriceUpdated(uint256 oldPrice, uint256 newPrice);
     event SaleStatusChanged(bool active);
     event FundsWithdrawn(address token, uint256 amount);
     event CofounderVestingCreated(address vestingContract, uint256 amount);
-    event RelayUpdated(address indexed oldRelay, address indexed newRelay);
-    event RelayPaymentReceived(address indexed buyer, address indexed paymentToken, uint256 netAmount, uint256 demiAmount);
-    
-    /*//////////////////////////////////////////////////////////////
-                        CONSTRUCTOR
-    //////////////////////////////////////////////////////////////*/
     
     constructor(
         address _usdt,
         address _usdc,
-        address _cofounder,
-        address _relay
+        address _cofounder
     ) ERC20("Demi", "DEMI") Ownable(msg.sender) {
         require(_cofounder != address(0), "Invalid cofounder");
         
         USDT = IERC20(_usdt);
         USDC = IERC20(_usdc);
-        relay = _relay;
         
-        // Initial distribution: 3.3B
         _mint(owner(), 1_650_000_000 * 10**18);
         
-        // Vesting for cofounder (165M, 24 months)
         uint256 cofounderAmount = 165_000_000 * 10**18;
         cofounderVesting = new TokenVesting(_cofounder, address(this), cofounderAmount, 730 days);
         
         _mint(address(this), 1_485_000_000 * 10**18);
         _mint(address(cofounderVesting), cofounderAmount);
         
-        tokenPrice = 10000;  // $0.01
+        tokenPrice = 10000;
         saleActive = true;
         
         emit CofounderVestingCreated(address(cofounderVesting), cofounderAmount);
     }
-    
-    /*//////////////////////////////////////////////////////////////
-                    ORIGINAL FUNCTIONS (unchanged)
-    //////////////////////////////////////////////////////////////*/
     
     function mintTokens(uint256 amount) external onlyOwner {
         require(amount > 0 && amount % 2 == 0, "Invalid amount");
@@ -172,8 +123,8 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
         require(saleActive, "Sale not active");
         require(usdtAmount > 0, "Amount must be greater than 0");
         uint256 demiAmount = calculateTokenAmount(usdtAmount);
-        require(demiAmount <= balanceOf(address(this)), "Insufficient DEMI in contract");
-        require(USDT.transferFrom(msg.sender, address(this), usdtAmount), "USDT transfer failed");
+        require(demiAmount <= balanceOf(address(this)), "Insufficient DEMI");
+        require(USDT.transferFrom(msg.sender, address(this), usdtAmount), "Transfer failed");
         _transfer(address(this), msg.sender, demiAmount);
         totalSold += demiAmount;
         totalRaisedUSDT += usdtAmount;
@@ -184,153 +135,41 @@ contract DEMI is ERC20, Ownable, ReentrancyGuard {
         require(saleActive, "Sale not active");
         require(usdcAmount > 0, "Amount must be greater than 0");
         uint256 demiAmount = calculateTokenAmount(usdcAmount);
-        require(demiAmount <= balanceOf(address(this)), "Insufficient DEMI in contract");
-        require(USDC.transferFrom(msg.sender, address(this), usdcAmount), "USDC transfer failed");
+        require(demiAmount <= balanceOf(address(this)), "Insufficient DEMI");
+        require(USDC.transferFrom(msg.sender, address(this), usdcAmount), "Transfer failed");
         _transfer(address(this), msg.sender, demiAmount);
         totalSold += demiAmount;
         totalRaisedUSDC += usdcAmount;
         emit TokensPurchased(msg.sender, demiAmount, usdcAmount, address(USDC));
     }
     
-    /*//////////////////////////////////////////////////////////////
-                    NEW: RELAY INTEGRATION
-    //////////////////////////////////////////////////////////////*/
-    
-    /**
-     * @notice Receive payment from Universal Relay (gasless purchase)
-     * @dev Only callable by relay contract
-     * @param buyer User purchasing DEMI
-     * @param paymentToken Token used for payment (any ERC20)
-     * @param netAmount Amount after relay fees deducted
-     */
-    function receiveRelayPayment(
-        address buyer,
-        address paymentToken,
-        uint256 netAmount
-    ) external nonReentrant {
-        require(msg.sender == relay, "Only relay");
-        require(saleActive, "Sale not active");
-        require(netAmount > 0, "Amount must be > 0");
-        
-        // Calculate DEMI amount at CURRENT price
-        // This prevents arbitrage if price changes between signing and execution
-        uint256 demiAmount = calculateTokenAmount(netAmount);
-        require(demiAmount <= balanceOf(address(this)), "Insufficient DEMI");
-        
-        // Transfer DEMI to buyer
-        _transfer(address(this), buyer, demiAmount);
-        
-        // Update stats
-        totalSold += demiAmount;
-        totalRaisedByToken[paymentToken] += netAmount;
-        
-        // Update legacy trackers if USDT/USDC
-        if (paymentToken == address(USDT)) {
-            totalRaisedUSDT += netAmount;
-        } else if (paymentToken == address(USDC)) {
-            totalRaisedUSDC += netAmount;
-        }
-        
-        emit RelayPaymentReceived(buyer, paymentToken, netAmount, demiAmount);
-        emit TokensPurchased(buyer, demiAmount, netAmount, paymentToken);
-    }
-    
-    /*//////////////////////////////////////////////////////////////
-                        ADMIN FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-    
-    function setRelay(address newRelay) external onlyOwner {
-        require(newRelay != address(0), "Invalid relay");
-        address oldRelay = relay;
-        relay = newRelay;
-        emit RelayUpdated(oldRelay, newRelay);
-    }
-    
-    function withdrawToken(address token) external onlyOwner {
-        uint256 balance = IERC20(token).balanceOf(address(this));
-        require(balance > 0, "No tokens");
-        require(IERC20(token).transfer(owner(), balance), "Transfer failed");
-        emit FundsWithdrawn(token, balance);
-    }
-    
-    function withdrawUSDT() external onlyOwner {
-        uint256 balance = USDT.balanceOf(address(this));
-        require(balance > 0, "No USDT to withdraw");
-        require(USDT.transfer(owner(), balance), "USDT transfer failed");
-        emit FundsWithdrawn(address(USDT), balance);
-    }
-    
-    function withdrawUSDC() external onlyOwner {
-        uint256 balance = USDC.balanceOf(address(this));
-        require(balance > 0, "No USDC to withdraw");
-        require(USDC.transfer(owner(), balance), "USDC transfer failed");
-        emit FundsWithdrawn(address(USDC), balance);
-    }
-    
-    function withdrawUnsoldTokens() external onlyOwner {
-        uint256 balance = balanceOf(address(this));
-        require(balance > 0, "No tokens to withdraw");
-        _transfer(address(this), owner(), balance);
-    }
-    
-    function setTokenPrice(uint256 newPrice) external onlyOwner {
-        require(newPrice > 0, "Price must be greater than 0");
+    function setPrice(uint256 newPrice) external onlyOwner {
         uint256 oldPrice = tokenPrice;
         tokenPrice = newPrice;
         emit PriceUpdated(oldPrice, newPrice);
     }
     
-    function setSaleActive(bool _active) external onlyOwner {
-        saleActive = _active;
-        emit SaleStatusChanged(_active);
+    function setSaleStatus(bool active) external onlyOwner {
+        saleActive = active;
+        emit SaleStatusChanged(active);
     }
     
-    function revokeCofounderVesting() external onlyOwner {
-        cofounderVesting.revoke();
+    function withdrawUSDT() external onlyOwner {
+        uint256 balance = USDT.balanceOf(address(this));
+        require(balance > 0, "No USDT");
+        require(USDT.transfer(owner(), balance), "Transfer failed");
+        emit FundsWithdrawn(address(USDT), balance);
     }
     
-    /*//////////////////////////////////////////////////////////////
-                        VIEW FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-    
-    function getSaleStats() external view returns (
-        uint256 currentPrice,
-        uint256 tokensSold,
-        uint256 raisedUSDT,
-        uint256 raisedUSDC,
-        uint256 remainingTokens,
-        bool isActive
-    ) {
-        return (tokenPrice, totalSold, totalRaisedUSDT, totalRaisedUSDC, balanceOf(address(this)), saleActive);
+    function withdrawUSDC() external onlyOwner {
+        uint256 balance = USDC.balanceOf(address(this));
+        require(balance > 0, "No USDC");
+        require(USDC.transfer(owner(), balance), "Transfer failed");
+        emit FundsWithdrawn(address(USDC), balance);
     }
     
-    function getContractBalances() external view returns (uint256 usdtBalance, uint256 usdcBalance) {
-        return (USDT.balanceOf(address(this)), USDC.balanceOf(address(this)));
-    }
-    
-    function getTokenBalance(address token) external view returns (uint256) {
-        return IERC20(token).balanceOf(address(this));
-    }
-    
-    function getTotalRaisedByToken(address token) external view returns (uint256) {
-        return totalRaisedByToken[token];
-    }
-    
-    function getCofounderVestingInfo() external view returns (
-        address vestingContract,
-        address beneficiary,
-        uint256 totalAmount,
-        uint256 released,
-        uint256 releasable,
-        bool isRevoked
-    ) {
-        return (
-            address(cofounderVesting),
-            cofounderVesting.beneficiary(),
-            cofounderVesting.totalAmount(),
-            cofounderVesting.released(),
-            cofounderVesting.releasableAmount(),
-            cofounderVesting.revoked()
-        );
+    function withdrawUnsoldTokens(uint256 amount) external onlyOwner {
+        require(amount <= balanceOf(address(this)), "Insufficient balance");
+        _transfer(address(this), owner(), amount);
     }
 }

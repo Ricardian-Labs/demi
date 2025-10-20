@@ -13,7 +13,6 @@ contract DeployScript is Script {
         address USDT;
         address USDC;
         address COFOUNDER = 0x6254081923f1125Fa6662285b0229e4bd8Ed2c1D;
-        address RELAY = address(0);  // Deploy with no relay first, update later
         string memory network;
         
         if (chainId == 137) {
@@ -29,23 +28,18 @@ contract DeployScript is Script {
         }
         
         console.log("Deploying DEMI to:", network);
-        console.log("Chain ID:", chainId);
         console.log("USDT:", USDT);
         console.log("USDC:", USDC);
         console.log("Cofounder:", COFOUNDER);
-        console.log("Relay:", RELAY);
         
         vm.startBroadcast(deployerPrivateKey);
         
-        DEMI demi = new DEMI(USDT, USDC, COFOUNDER, RELAY);
+        DEMI demi = new DEMI(USDT, USDC, COFOUNDER);
         
         console.log("\n=== DEMI Deployed ===");
         console.log("Contract:", address(demi));
         console.log("Owner:", demi.owner());
         console.log("Token Price:", demi.tokenPrice());
-        console.log("Sale Active:", demi.saleActive());
-        console.log("Cofounder Vesting:", address(demi.cofounderVesting()));
-        console.log("\nNOTE: Update relay address with: demi.updateRelay(relayAddress)");
         
         vm.stopBroadcast();
     }
